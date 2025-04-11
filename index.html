@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Residential Rate Trends Model</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    @media print {
+      .no-print {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1 class="text-2xl font-bold text-center mb-6">Residential Rate Trends Model</h1>
+
+  <div class="grid grid-cols-2 gap-6 no-print">
+    <div>
+      <label class="block font-medium">SFD Initial Rate (2020)</label>
+      <input type="number" id="sfdInitial" value="1050" class="border p-2 w-full" />
+    </div>
+    <div>
+      <label class="block font-medium">MFD Initial Rate (2020)</label>
+      <input type="number" id="mfdInitial" value="850" class="border p-2 w-full" />
+    </div>
+    <div>
+      <label class="block font-medium">SFD Suggested Growth Rate (% from 2025)</label>
+      <input type="number" step="0.1" id="sfdGrowthRate" value="3" class="border p-2 w-full" />
+    </div>
+    <div>
+      <label class="block font-medium">MFD Suggested Growth Rate (% from 2025)</label>
+      <input type="number" step="0.1" id="mfdGrowthRate" value="3" class="border p-2 w-full" />
+    </div>
+  </div>
+
+  <div class="flex gap-4 mt-6 no-print">
+    <button onclick="generateChart()" class="bg-blue-600 text-white px-4 py-2 rounded">Generate</button>
+    <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded">Export CSV</button>
+    <button onclick="window.print()" class="bg-gray-600 text-white px-4 py-2 rounded">Print</button>
+  </div>
+
+  <canvas id="trendChart" class="mt-8"></canvas>
+
+  <script>
+    const sfdCurrentGrowth = 1.7;
+    const mfdCurrentGrowth = 1.9;
+
+    function generateData(sfdInit, mfdInit, sfdRate, mfdRate) {
+      const data = [];
+      for (let year = 2020; year <= 2040; year++) {
+        const yearsSince2020 = year - 2020;
+        const sfdHist = sfdInit * Math.pow(1 + sfdCurrentGrowth / 100, yearsSince2020);
+        const mfdHist = mfdInit * Math.pow(1 + mfdCurrentGrowth / 100, yearsSince2020);
+
+        let sfdSugg = null;
+        let mfdSugg = null;
+        if (year >= 2025) {
+          const sfd2025 = sfdInit * Math.pow(1 + sfdCurrentGrowth / 100, 5);
+          const mfd2025 = mfdInit * Math.pow(1 + mfdCurrentGrowth / 100, 5);
+          const yearsSince2025 = year - 2025;
+          sfdSugg = sfd2025 * Math.pow(1 + sfdRate / 100, yearsSince2025);
+          mfdSugg = mfd2025 * Math.pow(1 + mfdRate / 100, yearsSince2025);
+        }
+
+        data.push({
+          year,
+          sfdHist: Math.round(sfdHist),
+          mfdHist: Math.round(mfdHist),
+          sfdSugg: sfdSugg ? Math.round(sfdSugg) : null,
+          mfdSugg: mfdSugg ? Math.round(mfdSugg) : null
+        });
+      }
+      return data;
+    }
+
+    let chart;
+
+    function generateChart() {
+      const sfdInit = Number(document.getElementById('sfdInitial').value);
+      const mfdInit = Number(document.getElementById('mfdInitial').value);
+      const sfdRate = Number(document.getElementById('sfdGrowthRate').value);
+      const mfdRate = Number(document.getElementById('mfdGrowthRate').value);
+
+      const data = generateData(sfdInit, mfdInit, sfdRate, mfdRate);
+
+      const labels = data.map(d => d.year);
+      const datasets = [
+        {
+          label: 'SFD Historical',
+          data: data.map(d => d.sfdHist),
+          borderColor: '#DAA520',
+          fill: false
+        },
+        {
+          label: 'MFD Historical',
+          data: data.map(d => d.mfdHist),
+          borderColor: '#8B4513',
+          fill: false
+        },
+        {
+          label: 'SFD Suggested',
+          data: data.map(d => d.sfdSugg),
+          borderColor: '#DAA520',
+          borderDash: [5, 5],
+          fill: false
+        },
+        {
+          label: 'MFD Suggested',
+          data: data.map(d => d.mfdSugg),
+          borderColor: '#8B4513',
+          borderDash: [5, 5],
+          fill: false
+        }
+      ];
+
+      if (chart) chart.destroy();
+
+      const ctx = document.getElementById('trendChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom' } },
+          scales: { y: { title: { display: true, text: 'Annual Rate ($)' } } }
+        }
+      });
+    }
+
+    function exportCSV() {
+      const sfdInit = Number(document.getElementById('sfdInitial').value);
+      const mfdInit = Number(document.getElementById('mfdInitial').value);
+      const sfdRate = Number(document.getElementById('sfdGrowthRate').value);
+      const mfdRate = Number(document.getElementById('mfdGrowthRate').value);
+      const data = generateData(sfdInit, mfdInit, sfdRate, mfdRate);
+
+      let csv = 'Year,SFD Historical,SFD Suggested,MFD Historical,MFD Suggested\n';
+      data.forEach(d => {
+        csv += `${d.year},${d.sfdHist},${d.sfdSugg || ''},${d.mfdHist},${d.mfdSugg || ''}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rate_trends.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  </script>
+</body>
+</html>
